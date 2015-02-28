@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+
+require 'plistener'
+
+def main
+  Plistener.run Dir.pwd
+end
+
+main

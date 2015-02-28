@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+gem build plistener.gemspec
+# gem uninstall plistener
+gem install --local plistener-0.0.1.gem
