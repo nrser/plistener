@@ -338,14 +338,25 @@ class Plistener
     # do a diff
     diff = diff prev_data, current_plist.data
     # now record a change
-    record_change current_plist, prev_entry, diff 
+    record_change current_plist, prev_entry, diff
   end
 
-  def added path, time
-
+  def added current_plist
+    update current_plist
+    diff = diff {}, current_plist.data
+    record_change current_plist, nil, diff 
   end
 
-  def removed path, time
-
+  def removed current_plist
+    prev_entry = last current_plist.system_path
+    update current_plist
+    if prev_entry.nil?
+      # we don't know what was there before
+      raise "we didn't know anything about file #{ current_plist.system_path.inspect }"
+    else
+      prev_data = version_data current_plist.system_path, prev_entry['file_hash']
+      diff = diff prev_data, current_plist.data
+      record_change current_plist, prev_entry, diff
+    end
   end
 end
