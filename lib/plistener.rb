@@ -84,13 +84,19 @@ class Plistener
   end
 
   def self.change_filename time, plist_system_path
-    # want this to be short and unique
-    [ 
-      time.to_i,
-      File.basename(plist_system_path),
-      Digest::SHA1.hexdigest(plist_system_path)[0...7],
-      'yml'
-    ].join '.'
+    # want this to be short and unique-ish
+    timestamp = time.to_i
+    # include the start of the sha1 hash of the system filepath.
+    # 
+    # this is so that several files with the same name changed at
+    # once (hopefully) won't produce the same filename, while keeping
+    # the overall filename relatively short
+    path_hash_start = Digest::SHA1.hexdigest(plist_system_path)[0...7]
+    # the filename, which is often significant enough to tell what file
+    # you're dealing with
+    basename = File.basename(plist_system_path)
+
+    "#{ timestamp }_#{ path_hash_start }_#{ basename }.yml"
   end
 
   def self.change_path changes_dir, time, plist_system_path
