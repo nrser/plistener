@@ -7,6 +7,8 @@ require 'digest/sha1'
 require 'diffable_yaml'
 require 'CFPropertyList'
 
+require "plistener/version"
+
 class Plistener
 
   # little internal wrapper for a current plist file from the system
