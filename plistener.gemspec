@@ -7,12 +7,8 @@ Gem::Specification.new do |spec|
   spec.name        = 'plistener'
   spec.version     = Plistener::VERSION
   spec.date        = '2015-02-28'
-  spec.summary     = "watch OSX plist preference files and record changes"
-  spec.description = <<-EOS
-this is alpha-as-fuck. please use with caution.
-
-it watches preference files stored as `.plist` on OSX and reports changes.
-EOS
+  spec.summary     = Plistener.readme('summary')
+  spec.description = Plistener.readme('description')
   spec.authors     = ["Neil Souza"]
   spec.email       = 'neil@neilsouza.com'
   spec.homepage    =
@@ -35,4 +31,6 @@ EOS
   spec.add_dependency 'hashdiff', '~> 0.2'
   spec.add_dependency 'diffable_yaml', '~> 0.0'
   spec.add_dependency 'CFPropertyList', '~> 2.2'
+  spec.add_dependency 'commander', '~> 4.3'
+  spec.add_dependency 'daemons', '~> 1.1'
 end

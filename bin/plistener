@@ -1,9 +1,19 @@
 #!/usr/bin/env ruby
 
+require 'commander/import'
 require 'plistener'
 
-def main
-  Plistener.run Dir.pwd
-end
+# :name is optional, otherwise uses the basename of this executable
+program :name, 'plistener'
+program :version, Plistener::VERSION
+program :description, Plistener.readme('summary')
 
-main
+command :run do |c|
+  c.syntax = Plistener.readme 'run:syntax'
+  c.description = Plistener.readme 'run:description'
+  c.option '--config STRING', String, 'the config file to use'
+  c.action do |args, options|
+    working_dir = args.first || Dir.pwd
+    Plistener.run working_dir
+  end
+end
