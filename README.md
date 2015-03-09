@@ -28,3 +28,28 @@ run the listener from the terminal, dumping to stdout.
 
 <!-- /run:syntax -->
 
+### clear
+
+<!-- clear:description -->
+
+remove all the change files in `<working_dir>/changes`.
+
+<!-- /clear:description -->
+<!-- clear:syntax -->
+    
+    plistener clear [working_dir=.]
+
+<!-- /clear:syntax -->
+
+### reset
+
+<!-- reset:description -->
+
+remove all data in `<working_dir>/data` and change files in `<working_dir>/changes`.
+
+<!-- /reset:description -->
+<!-- reset:syntax -->
+    
+    plistener reset [working_dir=.]
+
+<!-- /reset:syntax -->

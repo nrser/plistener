@@ -105,16 +105,23 @@ class Plistener
     File.join changes_dir, change_filename(time, plist_system_path)
   end
 
-  def self.run root
-    instance = self.new root
-    instance.run
+  def self.run working_dir
+    self.new(working_dir).run
   end
 
-  def initialize root
-    @root           = File.expand_path root
-    @config_path    = File.join root, "config.yml"
-    @data_dir       = File.join root, "data"
-    @changes_dir    = File.join root, "changes"
+  def self.clear working_dir
+    self.new(working_dir).clear
+  end
+
+  def self.reset working_dir
+    self.new(working_dir).reset
+  end
+
+  def initialize working_dir
+    @working_dir    = File.expand_path working_dir
+    @config_path    = File.join working_dir, "config.yml"
+    @data_dir       = File.join working_dir, "data"
+    @changes_dir    = File.join working_dir, "changes"
 
     load_config @config_path
   end
@@ -324,6 +331,15 @@ class Plistener
       scan path
     end
     listen
+  end
+
+  def clear
+    FileUtils.rm Dir.glob("#{ @changes_dir }/*.yml")
+  end
+
+  def reset
+    FileUtils.rm_rf Dir.glob("#{ @data_dir }/*")
+    clear
   end
 
   private

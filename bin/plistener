@@ -8,12 +8,32 @@ program :name, 'plistener'
 program :version, Plistener::VERSION
 program :description, Plistener.readme('summary')
 
-command :run do |c|
-  c.syntax = Plistener.readme 'run:syntax'
-  c.description = Plistener.readme 'run:description'
+def plistener_command name
+  command name do |c|
+    c.syntax = Plistener.readme "#{ name }:syntax"
+    c.description = Plistener.readme "#{ name }:description"
+    yield c
+  end
+end
+
+plistener_command :run do |c|
   c.option '--config STRING', String, 'the config file to use'
   c.action do |args, options|
     working_dir = args.first || Dir.pwd
     Plistener.run working_dir
+  end
+end
+
+plistener_command :clear do |c|
+  c.action do |args, options|
+    working_dir = args.first || Dir.pwd
+    Plistener.clear working_dir
+  end
+end
+
+plistener_command :reset do |c|
+  c.action do |args, options|
+    working_dir = args.first || Dir.pwd
+    Plistener.reset working_dir
   end
 end
