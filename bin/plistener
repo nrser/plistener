@@ -6,34 +6,40 @@ require 'plistener'
 # :name is optional, otherwise uses the basename of this executable
 program :name, 'plistener'
 program :version, Plistener::VERSION
-program :description, Plistener.readme('summary')
+program :description, "watch OSX plist preference files and record changes."
 
-def plistener_command name
-  command name do |c|
-    c.syntax = Plistener.readme "#{ name }:syntax"
-    c.description = Plistener.readme "#{ name }:description"
-    yield c
-  end
+def working_dir args, options
+  working_dir = args.first || Dir.pwd
 end
 
-plistener_command :run do |c|
+command :run do |c|
   c.option '--config STRING', String, 'the config file to use'
+  c.syntax = "plistener run [options] [working_dir=.]"
+  c.description = "run the listener from the terminal, dumping to stdout."
   c.action do |args, options|
-    working_dir = args.first || Dir.pwd
-    Plistener.run working_dir
+    Plistener.run working_dir(args, options)
   end
 end
 
-plistener_command :clear do |c|
+command :clear do |c|
+  c.description = "remove all the change files in `<working_dir>/changes`."
+  c.syntax = "plistener clear [working_dir=.]"
   c.action do |args, options|
-    working_dir = args.first || Dir.pwd
-    Plistener.clear working_dir
+    Plistener.clear working_dir(args, options)
   end
 end
 
-plistener_command :reset do |c|
+command :reset do |c|
+  c.description = "remove all data in `<working_dir>/data` and change files in `<working_dir>/changes`."
+  c.syntax = "plistener reset [working_dir=.]"
   c.action do |args, options|
-    working_dir = args.first || Dir.pwd
-    Plistener.reset working_dir
+    Plistener.reset working_dir(args, options)
+  end
+end
+
+command :ui do |c|
+  c.action do |args, options|
+    require 'plistener/ui'
+    Plistener::UI.run working_dir(args, options)
   end
 end
