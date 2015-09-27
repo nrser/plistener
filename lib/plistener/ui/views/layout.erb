@@ -1,0 +1,54 @@
+<html>
+  <head>
+  <link rel="stylesheet" href="/bootstrap-3.3.5-dist/css/bootstrap.min.css">
+
+    <style>
+      .header {
+        background-color: #EEE;
+      }
+
+      body {
+        margin-top: 60px;
+      }
+
+      .key-seg {
+        display: inline;
+        padding: .2em .6em .3em;
+        line-height: 1;
+        text-align: center;
+        white-space: nowrap;
+        vertical-align: baseline;
+        border-radius: .25em;
+        background-color: #d9edf7;
+        font-family: Menlo,Monaco,Consolas,"Courier New",monospace;
+        font-size: 90%;
+      }
+
+      td.key {
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid">
+      <nav class="navbar navbar-default navbar-fixed-top">
+        <div class="container-fluid">
+          <div class="navbar-header">
+            <a class="navbar-brand" href="/">
+              plistener ui
+            </a>
+          </div>
+          <ul class="nav navbar-nav">
+            <li>
+              <a href="/">changes</a>
+            </li>
+          </ul>
+        </div>
+      </nav>
+
+      <%= yield %>
+      
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,70 +1,55 @@
-<html>
-  <head>
-  <link rel="stylesheet" href="/bootstrap-3.3.5-dist/css/bootstrap.min.css">
 
-    <style>
-      .header {
-        background-color: #EEE;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container-fluid">
-        <% changes.each do |change| %>
+<% @changes.each do |change| %>
 
-            <ul class="list-group">
+  <ul class="list-group">
 
-              <li class="list-group-item header">
-                <div class="row">
-                  <div class="col col-md-4">
-                    <%= change['path'] %>
-                  </div>
+    <li class="list-group-item header">
+      <div class="row">
+        <div class="col col-md-4">
+          <%= change['path'] %>
+        </div>
 
-                  <div class="col col-md-4">
-                    <a href="/file<%= change['path'] %>@<%= change['prev']['file_hash'] %>">
-                      <%= change['prev']['file_hash'] %>
-                    </a>
-                  </div>
+        <div class="col col-md-4">
+          <a href="/version<%= change['path'] %>/<%= change['prev']['file_hash'] %>">
+            <%= change['prev']['file_hash'] %>
+          </a>
+        </div>
 
-                  <div class="col col-md-4">
-                    <a href="/file<%= change['path'] %>@<%= change['current']['file_hash'] %>">
-                      <%= change['current']['file_hash'] %>
-                    </a>
-                  </div>
-                </div>
-              </li>
-
-              <% change['diff'].each do |diff| %>
-                <li class="list-group-item">
-                  <div class="row">
-                    <div class="col col-md-4">
-                      <samp><%= diff['key'] %></samp>
-                    </div>
-
-                    <% if diff['op'] == 'remove' %>
-                      <div class="col col-md-4">
-                        <pre class="bg-danger"><%= diff['removed'] %></pre>
-                      </div>
-                    <% elsif diff['op'] == 'add' %>
-                      <div class="col col-md-4 col-md-offset-4">
-                        <pre class="bg-success"><%= diff['added'] %></pre>
-                      </div>
-                    <% elsif diff['op'] == 'change' %>
-                      <div class="col col-md-4">
-                        <pre class="bg-warning"><%= diff['from'] %></pre>
-                      </div>
-                      <div class="col col-md-4">
-                        <pre class="bg-warning"><%= diff['to'] %></pre>
-                      </div>
-                    <% end %>
-                  </div>
-                </li>
-              <% end %>
-
-            </ul>
-
-        <% end %>
+        <div class="col col-md-4">
+          <a href="/version<%= change['path'] %>/<%= change['current']['file_hash'] %>">
+            <%= change['current']['file_hash'] %>
+          </a>
+        </div>
       </div>
-    </div>
-  </body>
-</html>
+    </li>
+
+    <% change['diff'].each do |diff| %>
+      <li class="list-group-item">
+        <div class="row">
+          <div class="col col-md-4">
+            <samp><%= diff['key'] %></samp>
+          </div>
+
+          <% if diff['op'] == 'remove' %>
+            <div class="col col-md-4">
+              <pre class="bg-danger"><%= diff['removed'].pretty_inspect %></pre>
+            </div>
+          <% elsif diff['op'] == 'add' %>
+            <div class="col col-md-4 col-md-offset-4">
+              <pre class="bg-success"><%= diff['added'].pretty_inspect %></pre>
+            </div>
+          <% elsif diff['op'] == 'change' %>
+            <div class="col col-md-4">
+              <pre class="bg-warning"><%= diff['from'].pretty_inspect %></pre>
+            </div>
+            <div class="col col-md-4">
+              <pre class="bg-warning"><%= diff['to'].pretty_inspect %></pre>
+            </div>
+          <% end %>
+        </div>
+      </li>
+    <% end %>
+
+  </ul>
+
+<% end %>

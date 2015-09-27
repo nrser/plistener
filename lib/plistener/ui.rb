@@ -1,4 +1,5 @@
 require 'pathname'
+require 'pp'
 require 'sinatra/base'
 
 class Plistener
@@ -10,6 +11,10 @@ class Plistener
         super
       end
 
+      def erbetter tpl
+        erb tpl, layout: :layout
+      end
+
       # threaded - False: Will take requests on the reactor thread
       #            True:  Will queue request for background thread
       configure do
@@ -19,18 +24,30 @@ class Plistener
 
       # Request runs on the reactor thread (with threaded set to false)
       get '/' do
-        changes = Dir[@working_dir + "changes/*.yml"].map do |filepath|
+        @changes = Dir[@working_dir + "changes/*.yml"].map do |filepath|
           YAML.load File.read(filepath)
         end
 
-        erb :changes,
-            locals: {
-              changes: changes.reverse,
-            }
+        erbetter :changes
+      end
+
+      get '/version/*' do
+        @path = @working_dir + "data/#{ params['splat'].first }.yml"
+        @contents = File.read(@path)
+        @data = YAML.load @contents
+        @leaves = Plistener::UI.leaves @data
+
+        # case params['view']
+        # when 'yaml'
+        #   erbetter :version_yaml
+        # else
+          erbetter :version
+        # end
       end
     end
 
     class << self
+
       def run working_dir
         dispatch = Rack::Builder.app do
           map '/' do
@@ -46,6 +63,21 @@ class Plistener
           signals: false,
         })
       end # run
+
+      def leaves hash, array = [], prefix = []
+        hash.each do |key, value|
+          full_key = prefix.dup << key
+
+          if value.is_a? Hash
+            leaves value, array, full_key
+          else
+            array << [full_key, value]
+          end
+        end
+
+        return array
+      end # leaves
+
     end # class << self
   end # UI
 end # Plistener

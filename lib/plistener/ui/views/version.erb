@@ -1,0 +1,11 @@
+<div>
+  view:
+  <a href="<%= request.path %>">table</a>
+  <a href="<%= request.path %>?view=yaml">yaml</a>
+</div>
+
+<% if params['view'] == 'yaml' %>
+  <%= erb :version_yaml %>
+<% else %>
+  <%= erb :version_table %>
+<% end %>
