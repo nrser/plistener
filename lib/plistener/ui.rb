@@ -19,7 +19,13 @@ class Plistener
       #            True:  Will queue request for background thread
       configure do
         set :threaded, false
-        set :root, (Pathname.new(__FILE__).dirname + "ui")
+        set :root, (Pathname.new(__FILE__).dirname + ".." + ".." + "ui")
+        set :erb, :escape_html => true
+      end
+
+      # shitty error
+      get '/favicon.ico' do
+        status 404
       end
 
       # Request runs on the reactor thread (with threaded set to false)
@@ -32,17 +38,23 @@ class Plistener
       end
 
       get '/version/*' do
-        @path = @working_dir + "data/#{ params['splat'].first }.yml"
+        p, _, @file_hash = params['splat'].first.rpartition '/'
+        @system_path = "/" + p
+        @path = @working_dir + "data#{ @system_path }/#{ @file_hash }.yml"
         @contents = File.read(@path)
         @data = YAML.load @contents
         @leaves = Plistener::UI.leaves @data
+        @seen = Plistener::UI.seen @working_dir, @system_path, @file_hash
 
-        # case params['view']
-        # when 'yaml'
-        #   erbetter :version_yaml
-        # else
-          erbetter :version
-        # end
+        erbetter :version
+      end
+
+      get '/file/*' do
+        @system_path = "/" + params['splat'].first
+        @history_path = @working_dir + "data#{ @system_path }/history.yml"
+        @history = YAML.load @history_path.read
+
+        erbetter :file
       end
     end
 
@@ -59,7 +71,7 @@ class Plistener
           app:    dispatch,
           # server: 'thin',
           Host:   '0.0.0.0',
-          Port:   '8181',
+          Port:   '7584', # plui
           signals: false,
         })
       end # run
@@ -77,6 +89,41 @@ class Plistener
 
         return array
       end # leaves
+
+      def type_name value
+        case CFPropertyList.guess(value)
+        when CFPropertyList::CFString
+          'string'
+        when CFPropertyList::CFInteger
+          'int'
+        when CFPropertyList::CFReal
+          'float'
+        when CFPropertyList::CFDate
+          'date'
+        when CFPropertyList::CFBoolean
+          'bool'
+        when CFPropertyList::CFData
+          'data'
+        when CFPropertyList::CFArray
+          'array'
+        when CFPropertyList::CFDictionary
+          'dict'
+        when CFPropertyList::CFUid
+          'uid'
+        else
+          "unknown"
+        end 
+      end # type_name
+
+      def seen working_dir, system_path, file_hash
+        contents = File.read File.join(working_dir.to_s, "data", system_path, "history.yml")
+        data = YAML.load contents
+        data.select { |entry|
+          entry['file_hash'] == file_hash
+        }.map {|entry|
+          entry['time']
+        }
+      end
 
     end # class << self
   end # UI

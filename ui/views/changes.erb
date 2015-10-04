@@ -1,4 +1,3 @@
-
 <% @changes.each do |change| %>
 
   <ul class="list-group">
@@ -6,7 +5,7 @@
     <li class="list-group-item header">
       <div class="row">
         <div class="col col-md-4">
-          <%= change['path'] %>
+            <a href="/file<%= change['path'] %>"><%= change['path'] %></a>
         </div>
 
         <div class="col col-md-4">
@@ -20,7 +19,13 @@
             <%= change['current']['file_hash'] %>
           </a>
         </div>
-      </div>
+      </div><!-- .row -->
+
+      <div class="row">
+        <div class="col col-md-4">
+          <%== erb :_time, locals: {time: change['current']['time']} %>
+        </div>
+      </div><!-- .row -->
     </li>
 
     <% change['diff'].each do |diff| %>
@@ -32,7 +37,7 @@
 
           <% if diff['op'] == 'remove' %>
             <div class="col col-md-4">
-              <pre class="bg-danger"><%= diff['removed'].pretty_inspect %></pre>
+              <pre class="bg-danger"><%= erb :_value, locals: {value: diff['removed'] } %></pre>
             </div>
           <% elsif diff['op'] == 'add' %>
             <div class="col col-md-4 col-md-offset-4">

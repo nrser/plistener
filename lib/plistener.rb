@@ -6,10 +6,15 @@ require 'fileutils'
 require 'digest/sha1'
 require 'diffable_yaml'
 require 'CFPropertyList'
+require 'nrser'
 
 require "plistener/version"
 
 class Plistener
+
+  module Error
+    class ParseError < StandardError; end
+  end
 
   # little internal wrapper for a current plist file from the system
   class CurrentPlist
@@ -39,7 +44,13 @@ class Plistener
         @data = if contents.empty?
           {}
         else
-          plist = CFPropertyList::List.new data: @contents
+          begin
+           plist = CFPropertyList::List.new data: @contents
+          rescue Exception => e
+            raise Plistener::Error::ParseError.new NRSER.unblock <<-END
+              error parsing #{ @system_path }: #{ e }
+            END
+          end
           CFPropertyList.native_types plist.value
         end
       end
@@ -226,7 +237,15 @@ class Plistener
   def scan dir
     puts "scanning #{ dir.inspect }..."
     Dir.glob("#{ dir }/**/*.plist", File::FNM_DOTMATCH).each do |system_path|
-      update CurrentPlist.new(@data_dir, system_path)
+      begin
+        update CurrentPlist.new(@data_dir, system_path)
+      rescue Errno::EACCES => e
+        # can't read file
+        $stderr.puts "can't read #{ system_path }, skipping."
+      rescue Error::ParseError => e
+        # couldn't parse file
+        $stderr.puts "can't parse #{ system_path }, skipping."
+      end
     end
     puts "scan complete."
   end

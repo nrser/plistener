@@ -1,6 +1,6 @@
 <html>
   <head>
-  <link rel="stylesheet" href="/bootstrap-3.3.5-dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/bootstrap-3.3.5-dist/css/bootstrap.min.css">
 
     <style>
       .header {
@@ -27,7 +27,36 @@
       td.key {
         white-space: nowrap;
       }
+
+      .fixed-top {
+        top: 50px;
+        width: 100%;
+        position: fixed;
+        background-color: white;
+        padding-bottom: 10px;
+      }
+
+      .path {
+        font-family: Menlo,Monaco,Consolas,"Courier New",monospace;
+      }
+
     </style>
+
+    <script src="/jquery-1.11.3.js"></script>
+    <script src="/jquery.timeago-1.4.3.js"></script>
+
+    <script>
+      $(function(){
+        $('.timeago').timeago();
+
+        // adjust for unknown extra fixed-top height 
+        var $fixed_top = $('.fixed-top');
+        if ($fixed_top) {
+          $('body').css("margin-top", (60 + $fixed_top.height()).toString() + 'px');
+        }
+      });
+    </script>
+
   </head>
   <body>
     <div class="container-fluid">
@@ -46,7 +75,7 @@
         </div>
       </nav>
 
-      <%= yield %>
+      <%== yield %>
       
       </div>
     </div>

@@ -1,9 +1,9 @@
 <table class="table table-striped">
   <% @leaves.each do |key, value| %>
     <tr>
-      <td><%= value.class %></td>
+      <td><%= Plistener::UI.type_name value %></td>
       <td class="key">
-        <%= key.map {|seg| %{<span class="key-seg">#{ seg }</span>} }.join ':' %>
+        <%== key.map {|seg| %{<span class="key-seg">#{ Erubis::XmlHelper.escape_xml seg }</span>} }.join ':' %>
       </td>
       <td><%= value %></td>
     </tr>

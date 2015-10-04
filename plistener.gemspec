@@ -35,4 +35,5 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'daemons', '~> 1.1'
   spec.add_dependency 'nrser', '~> 0.0'
   spec.add_dependency 'sinatra', '~> 1.4'
+  spec.add_dependency 'erubis', '~> 2.7.0'
 end
