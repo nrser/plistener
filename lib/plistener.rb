@@ -4,13 +4,21 @@ require 'hashdiff'
 require 'yaml'
 require 'fileutils'
 require 'digest/sha1'
+require 'set'
+
 require 'diffable_yaml'
 require 'CFPropertyList'
+
 require 'nrser'
 
+require 'state_mate/adapters/defaults'
+
 require "plistener/version"
+require 'plistener/logger'
 
 class Plistener
+  include Plistener::Logger::Include
+  configure_logger level: ::Logger::DEBUG
 
   module Error
     class ParseError < StandardError; end
@@ -44,14 +52,15 @@ class Plistener
         @data = if contents.empty?
           {}
         else
-          begin
-           plist = CFPropertyList::List.new data: @contents
-          rescue Exception => e
-            raise Plistener::Error::ParseError.new NRSER.unblock <<-END
-              error parsing #{ @system_path }: #{ e }
-            END
-          end
-          CFPropertyList.native_types plist.value
+          StateMate::Adapters::Defaults.read [@system_path]
+          # begin
+          #  plist = CFPropertyList::List.new data: @contents
+          # rescue Exception => e
+          #   raise Plistener::Error::ParseError.new NRSER.unblock <<-END
+          #     error parsing #{ @system_path }: #{ e }
+          #   END
+          # end
+          # CFPropertyList.native_types plist.value
         end
       end
       @data
@@ -98,9 +107,9 @@ class Plistener
 
   def self.change_filename time, plist_system_path
     # want this to be short and unique-ish
-    timestamp = time.to_i
+    timestamp = time.strftime('%Y.%m.%d-%H.%M.%s.%L')
     # include the start of the sha1 hash of the system filepath.
-    # 
+    #
     # this is so that several files with the same name changed at
     # once (hopefully) won't produce the same filename, while keeping
     # the overall filename relatively short
@@ -133,8 +142,12 @@ class Plistener
     @config_path    = File.join working_dir, "config.yml"
     @data_dir       = File.join working_dir, "data"
     @changes_dir    = File.join working_dir, "changes"
+    @paths = [
+      '~/Library/Preferences',
+      '/Library/Preferences',
+    ]
 
-    load_config @config_path
+    # load_config @config_path
   end
 
   def versions_dir plist_system_path
@@ -195,29 +208,6 @@ class Plistener
     File.open(current_plist.version_path, 'w') do |f|
       f.write DiffableYAML.dump(data)
     end
-
-    # otherwise, we need to try and read the data
-    # begin
-    #   data = current_entry.data
-    # rescue Exception => e
-    #   # we ran into a parsing error
-
-    #   # what we want to here is record what happen
-
-    #   trace = "#{e.message} (#{e.class})\n\t#{ e.backtrace.join("\n\t") }"
-    #   File.open(errorpath, 'w') do |f|
-    #     f.write YAML.dump('trace' => trace, 'contents' => contents)
-    #   end
-
-    #   puts 
-    #   puts "couldn't read #{ realpath }:"
-    #   puts trace
-    #   puts
-    # else
-    #   File.open(filepath, 'w') do |f|
-    #     f.write DiffableYAML.dump(hash)
-    #   end
-    # end
   end
 
   def version_data system_path, file_hash
@@ -235,19 +225,19 @@ class Plistener
   end
 
   def scan dir
-    puts "scanning #{ dir.inspect }..."
+    info "scanning...", dir: dir
     Dir.glob("#{ dir }/**/*.plist", File::FNM_DOTMATCH).each do |system_path|
       begin
         update CurrentPlist.new(@data_dir, system_path)
       rescue Errno::EACCES => e
         # can't read file
-        $stderr.puts "can't read #{ system_path }, skipping."
+        warn "can't read file, skipping.", path: system_path, error: e
       rescue Error::ParseError => e
         # couldn't parse file
-        $stderr.puts "can't parse #{ system_path }, skipping."
+        warn "can't parse file, skipping.", path: system_path, error: e
       end
     end
-    puts "scan complete."
+    info "scan complete."
   end
 
   def record_change current_plist, prev_entry, diff
@@ -299,7 +289,7 @@ class Plistener
   end
 
   def paths
-    @config['paths'].map {|path, opts| path}
+    @paths.map {|path| Pathname.new(path).expand_path}
   end
 
   def listen
@@ -307,9 +297,18 @@ class Plistener
       # instantiate Plist for each change, which reads and file_hash's  the
       # contents. do this before any other processing to avoid delays that
       # may pick up additional changes
-      mod_plists = mod.map {|path| CurrentPlist.new @data_dir, path}
-      add_plists = add.map {|path| CurrentPlist.new @data_dir, path}
-      rem_plists = rem.map {|path| CurrentPlist.new @data_dir, path}
+      mod_plists = mod.map {|path|
+        info "file modified", path: path
+        CurrentPlist.new @data_dir, path
+      }
+      add_plists = add.map {|path|
+        info "file added", path: path
+        CurrentPlist.new @data_dir, path
+      }
+      rem_plists = rem.map {|path|
+        info "file removed", path: path
+        CurrentPlist.new @data_dir, path
+      }
 
       # now process the changes
       mod_plists.each {|plist| modified plist}
@@ -338,17 +337,48 @@ class Plistener
       # end
 
       # TODO: what about removals???
+
+      cleanup
     end
     listener.start
     sleep
   end
 
+  def cleanup
+    minutes = 1
+    info "cleaning up changes older than #{ minutes } minutes..."
+    limit = Time.now - (60 * minutes)
+
+    old_file_hashes = Set.new
+    current_file_hashes = Set.new
+
+    Dir["#{ @changes_dir }/*.yml"].each do |path|
+      change = YAML.load File.read(path)
+      if change['current']['time'] < limit
+        debug "deleting change",
+          path: path
+        old_file_hashes << [change['path'], change['prev']['file_hash']]
+        FileUtils.rm path
+      else
+        current_file_hashes << [change['path'], change['prev']['file_hash']]
+        current_file_hashes << [change['path'], change['current']['file_hash']]
+      end
+    end
+
+    to_del = old_file_hashes - current_file_hashes
+
+    to_del.each do |path, file_hash|
+      FileUtils.rm version_path path, file_hash
+    end
+  end
+
   def run
     FileUtils.mkdir_p @data_dir
     FileUtils.mkdir_p @changes_dir
-    @config['paths'].each do |path, opts|
+    paths.each do |path, opts|
       scan path
     end
+    cleanup
     listen
   end
 
@@ -381,7 +411,7 @@ class Plistener
   def added current_plist
     update current_plist
     diff = diff {}, current_plist.data
-    record_change current_plist, nil, diff 
+    record_change current_plist, nil, diff
   end
 
   def removed current_plist

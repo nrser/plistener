@@ -20,7 +20,7 @@ Gem::Specification.new do |spec|
 
   # s.executables << 'plistener'
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
-  
+
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]
 
@@ -36,4 +36,6 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'nrser', '~> 0.0'
   spec.add_dependency 'sinatra', '~> 1.4'
   spec.add_dependency 'erubis', '~> 2.7.0'
+  spec.add_dependency 'state_mate', '>= 0.0.3'
+  spec.add_dependency 'pastel', "~> 0.5"
 end
