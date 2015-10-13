@@ -120,6 +120,58 @@ class Plistener
     "#{ time_str time }_#{ path_hash_start }_#{ basename }.yml"
   end
 
+  # @api util
+  # *pure*
+  #
+  # use {HashDiff.diff} to diff two hashes and massage the results a little
+  # bit.
+  #
+  # @param from_hash [Hash] the older version of the hash.
+  # @param to_hash [Hash] the newer version of the hash.
+  #
+  # @return [Array<Hash>] an array of hashes detailing the differences.
+  #
+  #     each element has a 'op' key with value of 'change', 'add' or 'remove'
+  #     and a 'key' key with HashDiff's string representation of the key that
+  #     was changed.
+  #
+  #     'change' elements have 'from' and 'to' keys mapped to the old
+  #     and new values for the key.
+  #
+  #     'add' elements have an 'added' key mapped to the new value for
+  #     the key.
+  #
+  #     'remove' elements have a 'remove' key mapped to the old value
+  #     for the key.
+  #
+  def self.diff from_hash, to_hash
+   HashDiff.diff(from_hash, to_hash).map {|op_chr, key, a, b|
+      case op_chr
+      when '~'
+        {
+          'op' => 'change',
+          'key' => key,
+          'from' => a,
+          'to' => b,
+        }
+      when '+'
+        {
+          'op' => 'add',
+          'key' => key,
+          'added' => a,
+        }
+      when '-'
+        {
+          'op' => 'remove',
+          'key' => key,
+          'removed' => a,
+        }
+      else
+        raise "unknown op: #{ op.inspect }"
+      end
+    }
+  end
+
 
   # instance methods
   # ================
@@ -271,6 +323,7 @@ class Plistener
     path
   end # #last
 
+
   # @api util
   #
   # scan the target directories for initial versions of plist files.
@@ -299,34 +352,6 @@ class Plistener
     nil
   end # #scan
 
-
-  def diff from_hash, to_hash
-   HashDiff.diff(from_hash, to_hash).map {|op_chr, key, a, b|
-      case op_chr
-      when '~'
-        {
-          'op' => 'change',
-          'key' => key,
-          'from' => a,
-          'to' => b,
-        }
-      when '+'
-        {
-          'op' => 'add',
-          'key' => key,
-          'added' => a,
-        }
-      when '-'
-        {
-          'op' => 'remove',
-          'key' => key,
-          'removed' => a,
-        }
-      else
-        raise "unknown op: #{ op.inspect }"
-      end
-    }
-  end
 
   def run
     scan
@@ -607,7 +632,7 @@ class Plistener
       diff = if prev_data.nil?
         nil
       else
-        diff prev_data, self.class.read(current_version_path)
+        self.class.diff prev_data, self.class.read(current_version_path)
       end
 
       # now record a change
