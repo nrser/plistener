@@ -11,8 +11,7 @@ Gem::Specification.new do |spec|
   spec.description = Plistener.readme('description')
   spec.authors     = ["Neil Souza"]
   spec.email       = 'neil@neilsouza.com'
-  spec.homepage    =
-    'https://github.com/nrser/plistener'
+  spec.homepage    = 'https://github.com/nrser/plistener'
   spec.license       = 'BSD'
 
   # spec.files       = ["lib/plistener.rb"]
@@ -26,16 +25,18 @@ Gem::Specification.new do |spec|
 
   spec.add_development_dependency "bundler", "~> 1.6"
   spec.add_development_dependency "rake"
+  spec.add_development_dependency "yard"
+  spec.add_development_dependency "redcarpet"
+  spec.add_development_dependency "rspec"
+  spec.add_development_dependency "nrser-extras", ">= 0.0.3"
 
   spec.add_dependency 'listen', '~> 2.7'
   spec.add_dependency 'hashdiff', '~> 0.2'
   spec.add_dependency 'diffable_yaml', '~> 0.0'
   spec.add_dependency 'CFPropertyList', '~> 2.2'
   spec.add_dependency 'commander', '~> 4.3'
-  spec.add_dependency 'daemons', '~> 1.1'
   spec.add_dependency 'nrser', '~> 0.0'
   spec.add_dependency 'sinatra', '~> 1.4'
-  spec.add_dependency 'erubis', '~> 2.7.0'
   spec.add_dependency 'state_mate', '>= 0.0.3'
   spec.add_dependency 'pastel', "~> 0.5"
 end

@@ -30,7 +30,7 @@ class Plistener
     module Include
       module ClassMethods
         def logger
-          class_variable_get :@@__logger
+          class_variable_get(:@@__logger) || configure_logger
         end
 
         def debug *args
@@ -55,7 +55,9 @@ class Plistener
 
         def configure_logger options = {}
           options[:name] ||= self.name
-          class_variable_set :@@__logger, Plistener::Logger.new(options)
+          instance = Plistener::Logger.new(options)
+          class_variable_set :@@__logger, instance
+          instance
         end
       end # ClassMethods
 
@@ -101,18 +103,31 @@ class Plistener
       msg
     end
 
+    def self.int_level level
+      case level
+      when Fixnum
+        level
+      when Symbol
+        LEVEL_NAMES.each_with_index {|sym, index|
+          return index if level == sym
+        }
+      else
+        raise "bad level: #{ level.inspect }"
+      end
+    end
+
     def initialize options = {}
       @options = {
         dest: $stdout,
-        level: ::Logger::INFO,
+        level: :info,
         say_hi: true,
       }.merge options
 
       @logger = ::Logger.new @options[:dest]
-      @logger.level = @options[:level]
+      @logger.level = self.class.int_level @options[:level]
 
       @logger.formatter = proc do |severity, datetime, progname, msg|
-        prefix = "[#{ progname } #{ severity }]"
+        prefix = "[#{ progname } #{ severity } #{ datetime.strftime('%Y.%m.%d-%H.%M.%s.%L') }]"
         padding = " " * (prefix.length + 1)
 
         if SEVERITY_COLORS[severity]
@@ -137,28 +152,46 @@ class Plistener
       end
     end
 
-    def debug msg, dump = {}
-      send_log :debug, msg, dump
+    def debug *args
+      send_log :debug, args
     end
 
-    def info msg, dump = {}
-      send_log :info, msg, dump
+    def info *args
+      send_log :info, args
     end
 
-    def warn msg, dump = {}
-      send_log :warn, msg, dump
+    def warn *args
+      send_log :warn, args
     end
 
-    def error msg, dump = {}
-      send_log :error, msg, dump
+    def error *args
+      send_log :error, args
     end
 
-    def fatal msg, dump = {}
-      send_log :fatal, msg, dump
+    def fatal *args
+      send_log :fatal, args
     end
 
     private
-      def send_log level_name, msg, dump
+      def send_log level_name, args
+        msg = ''
+        dump = {}
+        case args.length
+        when 1
+          case args[0]
+          when Hash
+            dump = args[0]
+          when String
+            msg = args[0]
+          else
+            msg = args[0].to_s
+          end
+        when 2
+          msg, dump = args
+        else
+          raise "must provide one or two arguments, not #{ args.length }"
+        end
+
         @logger.send(level_name, @options[:name]) {
           Plistener::Logger.format(msg, dump)
         }

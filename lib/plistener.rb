@@ -16,98 +16,97 @@ require 'state_mate/adapters/defaults'
 require "plistener/version"
 require 'plistener/logger'
 
+using NRSER
+
 class Plistener
+  module Refinements
+    refine Object do
+      def maybe
+        yield self unless self.nil?
+      end
+    end
+  end
+end
+
+using Plistener::Refinements
+
+# @!attribute [r] paths
+#     @return [Array<String>] absolute paths being watched.
+#
+# @!attribute [r] config_path
+#     @return [String] absolute path to load config file from.
+class Plistener
+
+  DEFAULT_PATHS = [ '~/Library/Preferences', '/Library/Preferences', ]
+  DEFAULT_KEEP_MINUTES = 15
+
+  attr_accessor :paths,
+                :config_path,
+                :keep_minutes,
+                :listening,
+                :changes_dir,
+                :data_dir,
+                :paths
+
   include Plistener::Logger::Include
   configure_logger level: ::Logger::DEBUG
 
+  # submodules and subclasses
+  # ========================
+
   module Error
-    class ParseError < StandardError; end
+    class PlistenerError < StandardError; end
+    class ParseError < PlistenerError; end
+    class ConfigError < PlistenerError; end
   end
 
-  # little internal wrapper for a current plist file from the system
-  class CurrentPlist
-    attr_accessor :system_path,
-                  :contents,
-                  :time,
-                  :file_hash,
-                  :dir,
-                  :versions_dir,
-                  :version_path,
-                  :version_error_path,
-                  :history_path
+  # class util functions
+  # ====================
 
-    def initialize data_dir, system_path
-      @system_path        = system_path
-      @time               = Time.now
-      @contents           = File.read @system_path
-      @file_hash          = Digest::SHA1.hexdigest @contents
-      @versions_dir       = Plistener.versions_dir data_dir, system_path
-      @version_path       = Plistener.version_path data_dir, system_path, @file_hash
-      # @version_error_path = version_path
-      @history_path       = Plistener.history_path data_dir, system_path
-    end
+  # @api util
+  # *pure*
+  #
+  # get a datetime string that we use in filenames. includes milliseconds
+  # to reduce change of collisions when stuff is happening quickly.
+  #
+  # @param time [Time] the time to create the string for.
+  #
+  # @return [String] string formating of the time.
+  #
+  def self.time_str time
+    time.strftime '%Y.%m.%d-%H.%M.%S.%L'
+  end # .time_str
 
-    def data
-      if @data.nil?
-        @data = if contents.empty?
-          {}
-        else
-          StateMate::Adapters::Defaults.read [@system_path]
-          # begin
-          #  plist = CFPropertyList::List.new data: @contents
-          # rescue Exception => e
-          #   raise Plistener::Error::ParseError.new NRSER.unblock <<-END
-          #     error parsing #{ @system_path }: #{ e }
-          #   END
-          # end
-          # CFPropertyList.native_types plist.value
-        end
-      end
-      @data
-    end
-  end
 
-  # class HistoryPlist
-  #   def initialize data_dir, system_path, file_hash, time
-  #     @system_path = system_path
-  #     @time = time
-  #     @file_hash = file_hash
-  #     @dir                = File.join data_dir,  @system_path
-  #     @version_path       = File.join @dir,       "#{ @file_hash }.yml"
-  #     @version_error_path = File.join @dir,       "#{ @file_hash }.error.yml"
-  #     @history_path       = File.join @dir,       "history.yml"
-  #   end
-
-  #   def data
-  #     if @data.nil?
-  #       @data = YAML.load File.read(version_path)
-  #     end
-  #     @data
-  #   end
-  # end
-
+  # @api util
+  #
+  # uses {StateMate::Adapters::Defautls.read} to read the plist file path.
+  #
+  # under the hood, this uses `defaults export` to generate XML and
+  # then {CFPropertyList} to parse and Ruby-ize it.
+  #
+  # @param plist_path [String] absolute path to the plist file.
+  #
+  # @return [Hash] Ruby representation of the property list.
+  #
   def self.read plist_path
     # check if the file is empty
+    # TODO: not sure if still needed using StateMate
     return {} if File.zero? plist_path
-    plist = CFPropertyList::List.new file: plist_path
-    data = CFPropertyList.native_types plist.value
-  end
+    StateMate::Adapters::Defaults.read [plist_path]
+  end # .read
 
-  def self.versions_dir data_dir, plist_system_path
-    File.join data_dir, plist_system_path
-  end
 
-  def self.version_path data_dir, plist_system_path, file_hash
-    File.join versions_dir(data_dir, plist_system_path), "#{ file_hash }.yml"
-  end
-
-  def self.history_path data_dir, plist_system_path
-    File.join versions_dir(data_dir, plist_system_path), "history.yml"
-  end
-
+  # @api util
+  #
+  # @param time [Time] the time to generate the filename for.
+  # @param plist_system_path [String] absolute path to the plist on the system.
+  #
+  # @return [String] the change filename.
+  #
   def self.change_filename time, plist_system_path
     # want this to be short and unique-ish
-    timestamp = time.strftime('%Y.%m.%d-%H.%M.%s.%L')
+    #
     # include the start of the sha1 hash of the system filepath.
     #
     # this is so that several files with the same name changed at
@@ -118,147 +117,188 @@ class Plistener
     # you're dealing with
     basename = File.basename(plist_system_path)
 
-    "#{ timestamp }_#{ path_hash_start }_#{ basename }.yml"
+    "#{ time_str time }_#{ path_hash_start }_#{ basename }.yml"
   end
 
-  def self.change_path changes_dir, time, plist_system_path
-    File.join changes_dir, change_filename(time, plist_system_path)
-  end
 
-  def self.run working_dir
-    self.new(working_dir).run
-  end
+  # instance methods
+  # ================
 
-  def self.clear working_dir
-    self.new(working_dir).clear
-  end
-
-  def self.reset working_dir
-    self.new(working_dir).reset
-  end
-
-  def initialize working_dir
+  # @api public
+  #
+  # make a new Plistener.
+  #
+  # @param working_dir path to the directory to save stuff in. also where
+  #     the `config.yml` file is looked for by default.
+  #
+  # @param options [Hash] configuration options.
+  # @option options [Stirng] :config_path ("#{ working_dir }/config.yml")
+  #     path to load config file from.
+  # @option options [Array<Sting>] :paths
+  #     (['~/Library/Preferences', '/Library/Preferences'])
+  #     paths to watch.
+  # @option options [Fixnum] :keep_minutes (15) positive integer minutes to
+  #     keep records for.
+  #
+  def initialize working_dir, options = {}
     @working_dir    = File.expand_path working_dir
-    @config_path    = File.join working_dir, "config.yml"
-    @data_dir       = File.join working_dir, "data"
-    @changes_dir    = File.join working_dir, "changes"
-    @paths = [
-      '~/Library/Preferences',
-      '/Library/Preferences',
-    ]
+    @config_path    = File.join @working_dir, "config.yml"
+    @data_dir       = File.join @working_dir, "data"
+    @changes_dir    = File.join @working_dir, "changes"
 
-    # load_config @config_path
-  end
+    default_config_path = "#{ @working_dir }/config.yml"
+    @config_path = (
+      options[:config_path] ||
+      ENV['PLISTENER_CONFIG_PATH'] ||
+      default_config_path
+    ).pipe {|rel| File.expand_path rel}
 
-  def versions_dir plist_system_path
-    self.class.versions_dir @data_dir, plist_system_path
-  end
-
-  def version_path plist_system_path, file_hash
-    self.class.version_path @data_dir, plist_system_path, file_hash
-  end
-
-  def history_path plist_system_path
-    self.class.history_path @data_dir, plist_system_path
-  end
-
-  def change_path time, plist_system_path
-    self.class.change_path @changes_dir, time, plist_system_path
-  end
-
-  def load_config config_path
-    unless File.exists? @config_path
-      raise "config file #{ @config_path } not found"
-    end
-    @config = YAML.load File.read(config_path)
-    @config['paths'] = Hash[
-      @config['paths'].map {|rel, opts|
-        [File.expand_path(rel), opts]
-      }
-    ]
-    @config
-  end
-
-  def update current_plist
-    FileUtils.mkdir_p current_plist.versions_dir
-
-    history = if File.exists? current_plist.history_path
-      YAML.load File.read(current_plist.history_path)
-    else
-      []
-    end
-
-    # update history if it's not empty and the last entry isn't this file_hash
-    if history.empty? || history.last['file_hash'] != current_plist.file_hash
-      history << {
-        'time' => current_plist.time,
-        'file_hash' => current_plist.file_hash,
-      }
-      File.open(current_plist.history_path, 'w') do |f|
-        f.write YAML.dump(history)
-      end
-    end
-
-    # if the version path already exists, we've already got it's data
-    # recorded in `<file_hash>.yml` in are done here
-    return if File.exists? current_plist.version_path
-
-    data = current_plist.data
-
-    File.open(current_plist.version_path, 'w') do |f|
-      f.write DiffableYAML.dump(data)
-    end
-  end
-
-  def version_data system_path, file_hash
-    YAML.load File.read(version_path(system_path, file_hash))
-  end
-
-  def last system_path
-    history_path = history_path system_path
-    history = YAML.load File.read(history_path)
-    history.last
-    # filepath = File.join dir, "#{ entry['file_hash'] }.yml"
-    # return nil unless File.exists? filepath
-    # hash = YAML.load File.read(filepath)
-    # [entry, hash]
-  end
-
-  def scan dir
-    info "scanning...", dir: dir
-    Dir.glob("#{ dir }/**/*.plist", File::FNM_DOTMATCH).each do |system_path|
+    yaml_config = if (
+      # something was provided other than the default path
+      (@config_path != default_config_path) ||
+      # or it exists
+      File.exists?(@config_path)
+    )
+      # if either a config path
       begin
-        update CurrentPlist.new(@data_dir, system_path)
-      rescue Errno::EACCES => e
-        # can't read file
-        warn "can't read file, skipping.", path: system_path, error: e
-      rescue Error::ParseError => e
-        # couldn't parse file
-        warn "can't parse file, skipping.", path: system_path, error: e
+        YAML.load File.read(@config_path)
+      rescue Exception => e
+        raise Error::ConfigError.new binding.erb <<-END
+          could not read config from #{ @config_path }
+
+          error: <%= e.format %>
+        END
       end
+    else
+      # config file does not exist
+      {}
     end
-    info "scan complete."
+
+    @paths = (
+      options[:paths] ||
+      ENV['PLISTENER_PATHS'].maybe {|_| _.split(':')} ||
+      yaml_config['paths'] ||
+      DEFAULT_PATHS
+    ).map {|rel| File.expand_path rel }
+
+    @keep_minutes = (
+      options[:keep_minutes] ||
+      ENV['PLISTENER_KEEP_MINUTES'].maybe {|_| _.to_i} ||
+      yaml_config['keep_minutes'] ||
+      DEFAULT_KEEP_MINUTES
+    )
+
+    @listening = false
+
+    FileUtils.mkdir_p @data_dir
+    FileUtils.mkdir_p @changes_dir
+  end # #initialize
+
+  # instance util methods
+  # =====================
+
+  # @api util
+  #
+  def versions_dir plist_system_path
+    File.join @data_dir, plist_system_path
+  end # #versions_dir
+
+
+  # @api util
+  #
+  # @param time [Time] the time to generate the file path for.
+  # @param plist_system_path [String] absolute path to the plist on the system.
+  #
+  # @return [String] the change file path.
+  #
+  def change_path time, plist_system_path
+    File.join @changes_dir, self.class.change_filename(time, plist_system_path)
   end
 
-  def record_change current_plist, prev_entry, diff
-    change_path = change_path current_plist.time, current_plist.system_path
 
-    if File.exists? change_path
-      raise "change path exists: #{ change_path.inspect }"
+  # @api util
+  #
+  # get the last time a file was seen.
+  #
+  # @param system_path [String] absolute path to the plist file.
+  #
+  # @return [String, nil]
+  #     if there is history for the file, the path to the latest version.
+  #     otherwise `nil`.
+  #
+  def last system_path
+    debug "calling #last...",
+      system_path: system_path
+    # # changes is...
+    # #
+    # # get all the .yml files in the changes dir
+    # Pathname.glob("#{ @changes_dir }/*.yml").map {|pathname|
+    #   # load them
+    #   debug "loading #{ pathname }..."
+    #   YAML.load pathname.read
+    # }.select {|change|
+    #   # pick the ones who's path is the one we're looking for
+    #   change['path'] == system_path
+    # }.max_by {|change|
+    #   # grab the one with the greatest timestamp
+    #   change['time']
+    # }.pipe {|change|
+    #   # return it if we found one.
+    #   unless change.nil?
+    #     debug "found last via change",
+    #       change: change
+    #     return {
+    #       'file_hash' => change['current']['file_hash'],
+    #       'time' => change['current']['time'],
+    #     }
+    #   end
+    #   # otherwise, fall through...
+    # }
+
+    versions_dir = versions_dir system_path
+    debug "looking in versions dir...", versions_dir: versions_dir
+
+    # now we need to see if there are any versions in the data dir
+    path = Dir.glob(
+      # grab all the .yml paths in the versions dir
+      "#{ versions_dir }/*.plist"
+    ).max_by {|path|
+      # grab the one with the largest modified time
+      File.mtime path
+    }
+
+    debug "found", path: path
+    path
+  end # #last
+
+  # @api util
+  #
+  # scan the target directories for initial versions of plist files.
+  # run before listening.
+  #
+  # @return nil
+  #
+  def scan
+    paths.each do |dir|
+      info "scanning...", dir: dir
+      Dir.glob("#{ dir }/**/*.plist", File::FNM_DOTMATCH).each do |system_path|
+        # debug "found #{ system_path }"
+        begin
+          record_version system_path
+        rescue Errno::EACCES => e
+          # can't read file
+          warn "can't read file, skipping.", path: system_path, error: e
+        rescue Error::ParseError => e
+          # couldn't parse file
+          warn "can't parse file, skipping.", path: system_path, error: e
+        end
+      end
+      info "scan complete."
     end
 
-    File.open(change_path, 'w') do |f|
-      f.write YAML.dump(
-        'path' => current_plist.system_path,
-        'prev' => prev_entry,
-        'current' => {
-          'time' => current_plist.time,
-          'file_hash' => current_plist.file_hash,
-        },
-        'diff' => diff
-      )
-    end
-  end
+    nil
+  end # #scan
+
 
   def diff from_hash, to_hash
    HashDiff.diff(from_hash, to_hash).map {|op_chr, key, a, b|
@@ -288,97 +328,9 @@ class Plistener
     }
   end
 
-  def paths
-    @paths.map {|path| Pathname.new(path).expand_path}
-  end
-
-  def listen
-    listener = Listen.to(*paths, only: /\.plist$/) do |mod, add, rem|
-      # instantiate Plist for each change, which reads and file_hash's  the
-      # contents. do this before any other processing to avoid delays that
-      # may pick up additional changes
-      mod_plists = mod.map {|path|
-        info "file modified", path: path
-        CurrentPlist.new @data_dir, path
-      }
-      add_plists = add.map {|path|
-        info "file added", path: path
-        CurrentPlist.new @data_dir, path
-      }
-      rem_plists = rem.map {|path|
-        info "file removed", path: path
-        CurrentPlist.new @data_dir, path
-      }
-
-      # now process the changes
-      mod_plists.each {|plist| modified plist}
-      add_plists.each {|plist| added plist}
-      rem_plists.each {|plist| removed plist}
-
-      # mod.each do |path|
-      #   prev_entry, prev_hash = last path
-      #   update path
-      #   current_entry, current_hash = last path
-      #   unless current_entry['file_hash'] == prev_entry['file_hash']
-      #     record_change path,
-      #                   prev_entry,
-      #                   current_entry,
-      #                   diff(prev_hash, current_hash)
-      #   end
-      # end
-
-      # add.each do |path|
-      #   update path
-      #   current_entry, current_hash = last path
-      #   record_change path,
-      #                 prev_entry,
-      #                 current_entry,
-      #                 diff({}, current_hash)
-      # end
-
-      # TODO: what about removals???
-
-      cleanup
-    end
-    listener.start
-    sleep
-  end
-
-  def cleanup
-    minutes = 1
-    info "cleaning up changes older than #{ minutes } minutes..."
-    limit = Time.now - (60 * minutes)
-
-    old_file_hashes = Set.new
-    current_file_hashes = Set.new
-
-    Dir["#{ @changes_dir }/*.yml"].each do |path|
-      change = YAML.load File.read(path)
-      if change['current']['time'] < limit
-        debug "deleting change",
-          path: path
-        old_file_hashes << [change['path'], change['prev']['file_hash']]
-        FileUtils.rm path
-      else
-        current_file_hashes << [change['path'], change['prev']['file_hash']]
-        current_file_hashes << [change['path'], change['current']['file_hash']]
-      end
-    end
-
-    to_del = old_file_hashes - current_file_hashes
-
-    to_del.each do |path, file_hash|
-      FileUtils.rm version_path path, file_hash
-    end
-  end
-
   def run
-    FileUtils.mkdir_p @data_dir
-    FileUtils.mkdir_p @changes_dir
-    paths.each do |path, opts|
-      scan path
-    end
-    cleanup
+    scan
+    prune
     listen
   end
 
@@ -393,37 +345,298 @@ class Plistener
 
   private
 
-  def modified current_plist
-    prev_entry = last current_plist.system_path
-    # bail if the contents are the same as the last entry
-    return if current_plist.file_hash == prev_entry['file_hash']
-    # run an update to get the data into the system and record the
-    # history
-    update current_plist
-    # get the data from the previous version
-    prev_data = version_data current_plist.system_path, prev_entry['file_hash']
-    # do a diff
-    diff = diff prev_data, current_plist.data
-    # now record a change
-    record_change current_plist, prev_entry, diff
-  end
+    # @api private
+    #
+    # saves the current version of the plist in the data folder.
+    #
+    # @param system_path [String] absolute path to the `.plist` file on the
+    #     system.
+    #
+    # @return [String] path to the coppied version of the file.
+    #
+    def record_version system_path
+      debug "recording version",
+        system_path: system_path
 
-  def added current_plist
-    update current_plist
-    diff = diff {}, current_plist.data
-    record_change current_plist, nil, diff
-  end
+      # get the dir that this plist goes in
+      versions_dir = versions_dir system_path
 
-  def removed current_plist
-    prev_entry = last current_plist.system_path
-    update current_plist
-    if prev_entry.nil?
-      # we don't know what was there before
-      raise "we didn't know anything about file #{ current_plist.system_path.inspect }"
-    else
-      prev_data = version_data current_plist.system_path, prev_entry['file_hash']
-      diff = diff prev_data, current_plist.data
-      record_change current_plist, prev_entry, diff
+      # make sure the versions directory exists
+      FileUtils.mkdir_p versions_dir
+
+      temp_path = "#{ versions_dir }/temp_#{ File.basename system_path }"
+
+      # copy it to a temp filename in the versions dir
+      FileUtils.cp system_path, temp_path, preserve: true
+
+      # get the modified time
+      time = File.mtime temp_path
+
+      # build the version path
+      version_path = "#{ versions_dir }/#{ self.class.time_str time }_#{ File.basename system_path }"
+
+      # rename the file
+      FileUtils.cp temp_path, version_path, preserve: true
+      FileUtils.rm temp_path
+
+      debug "done recording version.",
+        system_path: system_path,
+        version_path: version_path
+
+      version_path
+    end # #record_version
+
+
+    # @api private
+    #
+    # record a change in the `changes` folder.
+    #
+    # @param system_path [String] absolute path to plist on system.
+    #
+    # @param current_version_path [String] absolute path to the current version
+    #     in the `data` folder.
+    #
+    # @param prev_version_path [String, nil] absolute path to the previous version
+    #     in the `data` folder. may be `nil` if we don't know anything about
+    #     previous versions.
+    #
+    # @param diff [Array<Hash<String, Object>>, nil] the output of {#diff}.
+    #     may be `nil` if we don't have a previous version to diff against.
+    #
+    # @return nil
+    #
+    def record_change system_path,
+                      current_version_path,
+                      prev_version_path,
+                      diff
+      change_path = change_path Time.now, system_path
+
+      if File.exists? change_path
+        raise "change path exists: #{ change_path.inspect }"
+      end
+
+      change = {
+        'path' => system_path,
+        'current' => {
+          'path' => current_version_path,
+          'time' => File.mtime(current_version_path),
+        },
+        'diff' => diff,
+      }
+
+      change['prev'] = prev_version_path.maybe {|prev_version_path|
+        {
+          'path' => prev_version_path,
+          'time' => File.mtime(prev_version_path),
+        }
+      }
+
+      File.open(change_path, 'w') do |f|
+        f.write YAML.dump(change)
+      end
+
+      nil
+    end # #record_change
+
+
+    # @api private
+    #
+    # starts listening
+    #
+    # @return nil
+    #
+    def listen
+      debug "calling #listen..."
+
+      listener = Listen.to(*paths, only: /\.plist$/) do |mod, add, rem|
+        hear mod, add, rem
+
+        begin
+          prune
+        rescue Exception => e
+          error binding.erb <<-END
+            exception while pruning old changes and versions:
+              error: <%= e.format %>
+          END
+        end
+      end
+
+      listener.start
+      @listening = true
+      debug "listening..."
+
+      # Trap ^C
+      Signal.trap("INT") {
+        @listening = false
+      }
+
+      # Trap `Kill `
+      Signal.trap("TERM") {
+        @listening = false
+      }
+
+      sleep 0.01 while @listening
+
+      info "stoping listening..."
+      listener.stop
+      info "done listening."
+
+      nil
+    end # #listen
+
+
+    # @api private
+    #
+    # respond to files that have changed.
+    #
+    # @param mod_paths [Array<String>] list of absolute paths that have
+    #     been modified.
+    #
+    # @param add_paths [Array<String>] list of absolute paths that have been
+    #     added.
+    #
+    # @param rem_paths [Array<String>] list of absolute paths that have been
+    #     removed.
+    #
+    # @return nil
+    #
+    def hear mod_paths, add_paths, rem_paths
+      # instantiate Plist for each change, which reads and file_hash's  the
+      # contents. do this before any other processing to avoid delays that
+      # may pick up additional changes
+      mod_plists = mod_paths.map {|system_path|
+        info "file modified", system_path: system_path
+        begin
+          modified system_path
+        rescue Exception => e
+          error binding.erb <<-END
+            exception while processing modified file:
+              system_path: <%= system_path %>
+              error: <%= e.format %>
+          END
+        end
+      }
+
+      add_plists = add_paths.map {|path|
+        info "file added", path: path
+        # CurrentPlist.new @data_dir, path
+      }
+      rem_plists = rem_paths.map {|path|
+        info "file removed", path: path
+        # CurrentPlist.new @data_dir, path
+      }
+
+      # # now process the changes
+      # mod_plists.each {|plist| modified plist}
+      # add_plists.each {|plist| added plist}
+      # rem_plists.each {|plist| removed plist}
+    end # #hear
+
+
+    # @api private
+    #
+    # removes changes older than {#keep_minutes} old and plist versions that
+    # are no longer referenced.
+    #
+    # @return nil
+    #
+    def prune
+      info "pruning changes older than #{ @keep_minutes } minutes..."
+      limit = Time.now - (60 * @keep_minutes)
+
+      old_file_paths = Set.new
+      current_file_paths = Set.new
+
+      Dir["#{ @changes_dir }/*.yml"].each do |path|
+        change = YAML.load File.read(path)
+        if change['current']['time'] < limit
+          debug "deleting change",
+            path: path
+
+          # prev may be nil
+          change['prev'].maybe {|prev|
+            old_file_paths << prev['path']
+          }
+
+          FileUtils.rm path
+        else
+          current_file_paths << change['current']['path']
+        end
+      end
+
+      to_del = old_file_paths - current_file_paths
+
+      to_del.each do |path|
+        debug "removing plist version", path: path
+        FileUtils.rm path
+      end
+
+      nil
+    end # #prune
+
+    # @api private
+    #
+    # @param system_path [String] absolute path to the plist file.
+    #
+    # @return nil
+    #
+    def modified system_path
+      debug "processing modified file",
+        system_path: system_path
+
+      # do this *before* recording the version so we don't see it as the
+      # previous entry when there is no change to go off
+      prev_version_path = last system_path
+      debug "previous version",
+        path: prev_version_path
+
+      # run an update to get the data into the system
+      current_version_path = record_version system_path
+
+      # get the data from the previous version
+      prev_data = if prev_version_path.nil?
+        # if we don't have a previous version, assign nil
+        nil
+      else
+        # otherwise read the previous version
+       self.class.read prev_version_path
+     end
+
+      # do a diff
+      # this will be `nil` if we don't have a previous version
+      diff = if prev_data.nil?
+        nil
+      else
+        diff prev_data, self.class.read(current_version_path)
+      end
+
+      # now record a change
+      record_change system_path, current_version_path, prev_version_path, diff
+
+      debug "done processing modification.",
+        system_path: system_path,
+        current_version_path: current_version_path
+
+      nil
+    end # #modified
+
+    def added current_plist
+      update current_plist
+      diff = diff {}, current_plist.data
+      record_change current_plist, nil, diff
     end
-  end
+
+    def removed current_plist
+      prev_entry = last current_plist.system_path
+      update current_plist
+      if prev_entry.nil?
+        # we don't know what was there before
+        raise "we didn't know anything about file #{ current_plist.system_path.inspect }"
+      else
+        prev_data = version_data current_plist.system_path, prev_entry['file_hash']
+        diff = diff prev_data, current_plist.data
+        record_change current_plist, prev_entry, diff
+      end
+    end
+  # end private
 end
