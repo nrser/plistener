@@ -35,8 +35,9 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'diffable_yaml', '~> 0.0'
   spec.add_dependency 'CFPropertyList', '~> 2.2'
   spec.add_dependency 'commander', '~> 4.3'
-  spec.add_dependency 'nrser', '~> 0.0'
+  spec.add_dependency 'nrser', '>= 0.0.13'
   spec.add_dependency 'sinatra', '~> 1.4'
   spec.add_dependency 'state_mate', '>= 0.0.3'
   spec.add_dependency 'pastel', "~> 0.5"
+  spec.add_dependency 'cmds', ">= 0.0.9"
 end

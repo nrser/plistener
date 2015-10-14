@@ -71,6 +71,40 @@ def write_config path, hash
   end
 end
 
+def defaults_write key, value, options = {}
+  options = {
+    path: FILEPATH,
+    type: "string",
+  }.merge options
+
+  Cmds! "defaults write %{path} %{key} %{type} %{value}",
+    path: options[:path],
+    key: key,
+    type: "-#{ options[:type] }",
+    value: value
+end
+
+def expect_defaults_read key, matcher, options = {}
+  options = {
+    path: FILEPATH,
+    type: nil,
+  }.merge options
+
+  expect(
+    Cmds.chomp! 'defaults read %{path} %{key}',
+      path: options[:path],
+      key: key
+  ).to matcher
+
+  unless options[:type].nil?
+    expect(
+      Cmds.chomp! 'defaults read-type %{path} %{key}',
+        path: options[:path],
+        key: key
+    ).to eq "Type is #{ options[:type] }"
+  end
+end
+
 shared_context "fresh" do
   before(:each) {
     # Plistener.configure_logger level: 0, dest: LOGFILE.open('w')

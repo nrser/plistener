@@ -98,6 +98,7 @@ class Plistener
 
 
   # @api util
+  # *pure*
   #
   # @param time [Time] the time to generate the filename for.
   # @param plist_system_path [String] absolute path to the plist on the system.
@@ -258,6 +259,20 @@ class Plistener
 
   # @api util
   #
+  # get the path to a version of the plist in the data folder.
+  #
+  # @param time [Time] the time to base the version on.
+  # @param plist_system_path [String] absolute path to the plist on the system.
+  #
+  # @return [String] the absolute path to the version in the `data` dir.
+  #
+  def version_path time, plist_system_path
+    "#{ versions_dir(plist_system_path) }/#{ self.class.time_str time }_#{ File.basename plist_system_path }"
+  end
+
+
+  # @api util
+  #
   # @param time [Time] the time to generate the file path for.
   # @param plist_system_path [String] absolute path to the plist on the system.
   #
@@ -398,7 +413,7 @@ class Plistener
       time = File.mtime temp_path
 
       # build the version path
-      version_path = "#{ versions_dir }/#{ self.class.time_str time }_#{ File.basename system_path }"
+      version_path = version_path time, system_path
 
       # rename the file
       FileUtils.cp temp_path, version_path, preserve: true
