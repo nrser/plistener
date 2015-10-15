@@ -17,6 +17,7 @@ command :run do |c|
   c.syntax = "plistener run [options] [working_dir=.]"
   c.description = "run the listener from the terminal, dumping to stdout."
   c.action do |args, options|
+    Plistener.configure_logger
     Plistener.new(working_dir(args, options)).run
   end
 end

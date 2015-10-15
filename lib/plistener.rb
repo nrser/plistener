@@ -13,8 +13,9 @@ require 'nrser'
 
 require 'state_mate/adapters/defaults'
 
-require "plistener/version"
+require 'plistener/version'
 require 'plistener/logger'
+require 'plistener/error'
 
 using NRSER
 
@@ -37,8 +38,14 @@ using Plistener::Refinements
 #     @return [String] absolute path to load config file from.
 class Plistener
 
+  # constants
+  # =========
+
   DEFAULT_PATHS = [ '~/Library/Preferences', '/Library/Preferences', ]
   DEFAULT_KEEP_MINUTES = 15
+
+  # attributes
+  # ==========
 
   attr_accessor :paths,
                 :config_path,
@@ -48,17 +55,11 @@ class Plistener
                 :data_dir,
                 :paths
 
+  # class configuration
+  # ==================
+
   include Plistener::Logger::Include
-  configure_logger level: ::Logger::DEBUG
-
-  # submodules and subclasses
-  # ========================
-
-  module Error
-    class PlistenerError < StandardError; end
-    class ParseError < PlistenerError; end
-    class ConfigError < PlistenerError; end
-  end
+  # configure_logger level: ::Logger::DEBUG
 
   # class util functions
   # ====================
@@ -92,8 +93,16 @@ class Plistener
   def self.read plist_path
     # check if the file is empty
     # TODO: not sure if still needed using StateMate
-    return {} if File.zero? plist_path
-    StateMate::Adapters::Defaults.read [plist_path]
+    # return {} if File.zero? plist_path
+    begin
+      StateMate::Adapters::Defaults.read [plist_path]
+    rescue Exception => e
+      raise Error::ParseError.new binding.erb <<-END
+        error reading plist at <%= plist_path %>:
+
+        e.format
+      END
+    end
   end # .read
 
 
@@ -136,7 +145,7 @@ class Plistener
   #     and a 'key' key with HashDiff's string representation of the key that
   #     was changed.
   #
-  #     'change' elements have 'from' and 'to' keys mapped to the old
+  #     'modify' elements have 'from' and 'to' keys mapped to the old
   #     and new values for the key.
   #
   #     'add' elements have an 'added' key mapped to the new value for
@@ -150,7 +159,7 @@ class Plistener
       case op_chr
       when '~'
         {
-          'op' => 'change',
+          'op' => 'modify',
           'key' => key,
           'from' => a,
           'to' => b,
@@ -174,7 +183,7 @@ class Plistener
   end
 
 
-  # instance methods
+  # public API instance methods
   # ================
 
   # @api public
@@ -247,7 +256,16 @@ class Plistener
     FileUtils.mkdir_p @changes_dir
   end # #initialize
 
-  # instance util methods
+  # @api public
+  #
+  #
+  def changes system_path = nil
+    Dir.glob("#{ @changes_dir }/*.yml").map {|path|
+      YAML.load File.open(path)
+    }
+  end
+
+  # util instance methods
   # =====================
 
   # @api util
@@ -383,7 +401,7 @@ class Plistener
     clear
   end
 
-  private
+  # private
 
     # @api private
     #
@@ -431,14 +449,46 @@ class Plistener
     #
     # record a change in the `changes` folder.
     #
+    # a 'change' looks like:
+    #
+    #     {
+    #       'path' => String,
+    #       'type' => 'modify' | 'add' | 'remove',
+    #       'prev' => nil | {
+    #         'path' => String,
+    #         'time' => Time
+    #       },
+    #       'current' => nil | {
+    #         'path' => String,
+    #         'time' => Time,
+    #       },
+    #       'diff' => [
+    #         nil | {
+    #           'op' => 'update',
+    #           'key' => String,
+    #           'from' => Object,
+    #           'to' => Object,
+    #         } | {
+    #           'op' => 'add',
+    #           'key' => String,
+    #           'added' => Object,
+    #         } | {
+    #           'op' => 'remove',
+    #           'key' => String,
+    #           'removed' => Object,
+    #         }
+    #       ]
+    #     }
+    #
     # @param system_path [String] absolute path to plist on system.
     #
-    # @param current_version_path [String] absolute path to the current version
-    #     in the `data` folder.
+    # @param current_version_path [String, nil] absolute path to the current
+    #     version in the `data` folder. will be `nil` in the case of a removed
+    #     file.
     #
-    # @param prev_version_path [String, nil] absolute path to the previous version
-    #     in the `data` folder. may be `nil` if we don't know anything about
-    #     previous versions.
+    # @param prev_version_path [String, nil] absolute path to the previous
+    #     version in the `data` folder. will be `nil` in the case of added
+    #     files and changes for which we can't find a previous version.
     #
     # @param diff [Array<Hash<String, Object>>, nil] the output of {#diff}.
     #     may be `nil` if we don't have a previous version to diff against.
@@ -446,30 +496,35 @@ class Plistener
     # @return nil
     #
     def record_change system_path,
+                      type,
                       current_version_path,
                       prev_version_path,
                       diff
       change_path = change_path Time.now, system_path
 
-      if File.exists? change_path
-        raise "change path exists: #{ change_path.inspect }"
-      end
+      raise ChangePathConflictError.new if File.exists? change_path
 
       change = {
         'path' => system_path,
-        'current' => {
-          'path' => current_version_path,
-          'time' => File.mtime(current_version_path),
-        },
+        'type' => type,
+        'prev' => nil,
+        'current' => nil,
         'diff' => diff,
       }
 
-      change['prev'] = prev_version_path.maybe {|prev_version_path|
-        {
-          'path' => prev_version_path,
-          'time' => File.mtime(prev_version_path),
-        }
-      }
+      # add data for the previous and current versions of the file
+      # if we received paths for them.
+      {
+        'current' => current_version_path,
+        'prev' => prev_version_path,
+      }.each do |key, path|
+        unless path.nil?
+          change[key] = {
+            'path' => path,
+            'time' => File.mtime(path),
+          }
+        end
+      end
 
       File.open(change_path, 'w') do |f|
         f.write YAML.dump(change)
@@ -477,6 +532,35 @@ class Plistener
 
       nil
     end # #record_change
+
+
+    # @api private
+    #
+    # record that an error happen when processing a file change.
+    #
+    # @param system_path [String] absolute path to plist file on system.
+    # @param type ['modified', 'added', 'removed'] the type of file change.
+    # @param error [Exception] the error that occured.
+    #
+    # @return nil
+    #
+    def record_error system_path, type, error
+      change_path = change_path Time.now, system_path
+
+      raise ChangePathConflictError.new if File.exists? change_path
+
+      change = {
+        'path' => system_path,
+        'type' => type,
+        'error' => error.format,
+      }
+
+      File.open(change_path, 'w') do |f|
+        f.write YAML.dump(change)
+      end
+
+      nil
+    end
 
 
     # @api private
@@ -549,27 +633,27 @@ class Plistener
         begin
           modified system_path
         rescue Exception => e
-          error binding.erb <<-END
-            exception while processing modified file:
-              system_path: <%= system_path %>
-              error: <%= e.format %>
-          END
+          record_error system_path, type, error
         end
       }
 
       add_plists = add_paths.map {|path|
         info "file added", path: path
-        # CurrentPlist.new @data_dir, path
-      }
-      rem_plists = rem_paths.map {|path|
-        info "file removed", path: path
-        # CurrentPlist.new @data_dir, path
+        begin
+          added system_path
+        rescue Exception => e
+          record_error system_path, type, error
+        end
       }
 
-      # # now process the changes
-      # mod_plists.each {|plist| modified plist}
-      # add_plists.each {|plist| added plist}
-      # rem_plists.each {|plist| removed plist}
+      rem_plists = rem_paths.map {|path|
+        info "file removed", path: path
+        begin
+          removed system_path
+        rescue Exception => e
+          record_error system_path, type, error
+        end
+      }
     end # #hear
 
 
@@ -627,31 +711,30 @@ class Plistener
       # do this *before* recording the version so we don't see it as the
       # previous entry when there is no change to go off
       prev_version_path = last system_path
+
+      # if the previous version path is `nil` raise an error, which will
+      # get recorded by the caller
+      raise Error::PreviousVersionNotFoundError if prev_version_path.nil?
+
       debug "previous version",
         path: prev_version_path
 
-      # run an update to get the data into the system
+      # record this version, getting the path to it in the data dir
       current_version_path = record_version system_path
 
       # get the data from the previous version
-      prev_data = if prev_version_path.nil?
-        # if we don't have a previous version, assign nil
-        nil
-      else
-        # otherwise read the previous version
-       self.class.read prev_version_path
-     end
+      prev_data = self.class.read prev_version_path
 
       # do a diff
-      # this will be `nil` if we don't have a previous version
-      diff = if prev_data.nil?
-        nil
-      else
-        self.class.diff prev_data, self.class.read(current_version_path)
-      end
+      diff = self.class.diff  self.class.read(prev_version_path),
+                              self.class.read(current_version_path)
 
       # now record a change
-      record_change system_path, current_version_path, prev_version_path, diff
+      record_change system_path,
+                    'modified',
+                    current_version_path,
+                    prev_version_path,
+                    diff
 
       debug "done processing modification.",
         system_path: system_path,
@@ -660,23 +743,29 @@ class Plistener
       nil
     end # #modified
 
-    def added current_plist
-      update current_plist
-      diff = diff {}, current_plist.data
-      record_change current_plist, nil, diff
+    # @api private
+    def added system_path
+      debug "processing added file",
+        system_path: system_path
+
+      version_path = record_version system_path
+      diff = self.class.diff({}, self.class.read(version_path))
+      record_change system_path, 'added', version_path, nil, diff
     end
 
-    def removed current_plist
-      prev_entry = last current_plist.system_path
-      update current_plist
-      if prev_entry.nil?
-        # we don't know what was there before
-        raise "we didn't know anything about file #{ current_plist.system_path.inspect }"
-      else
-        prev_data = version_data current_plist.system_path, prev_entry['file_hash']
-        diff = diff prev_data, current_plist.data
-        record_change current_plist, prev_entry, diff
-      end
+    def removed system_path
+      debug "processing removed file",
+        system_path: system_path
+
+      # get the path to the previous version (may be `nil`)
+      prev_version_path = last system_path
+
+      # if that path is `nil` raise an error, which will get recorded
+      # by the caller
+      raise Error::PreviousVersionNotFoundError if prev_version_path.nil?
+
+      diff = self.class.diff self.class.read(prev_version_path), {}
+      record_change system_path, 'removed', nil, prev_version_path, diff
     end
   # end private
 end

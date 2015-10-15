@@ -9,12 +9,22 @@ ROOT = NRSER.git_root(__FILE__).to_s
 TMP = "#{ ROOT }/tmp"
 WORKING_DIR = "#{ TMP }/rspec"
 DOMAIN = "com.nrser.plistener.test"
-# FILEPATH = File.expand_path "~/Library/Preferences/#{ DOMAIN }.plist"
 FILEPATH = "#{ WORKING_DIR }/plists/#{ DOMAIN }.plist"
 LOGFILE = "#{ WORKING_DIR }/log.txt"
 FileUtils.mkdir_p File.dirname(LOGFILE)
 PATHS = [File.dirname(FILEPATH)]
 CONFIG_FILE = "#{ WORKING_DIR }/config.yml"
+
+LEVELS = {
+  Logger::DEBUG => [:debug, 'DEBUG'],
+  Logger::INFO => [:info, 'INFO'],
+  Logger::WARN => [:warn, 'WARN'],
+  Logger::ERROR => [:error, 'ERROR'],
+  Logger::FATAL => [:fatal, 'FATAL'],
+  Logger::UNKNOWN => [:unknown, 'UNKNOWN'],
+}
+
+BAD_LEVELS = [:blah, -1, 6, "BLAH"]
 
 File.open(CONFIG_FILE, 'w') do |f|
   f.write YAML.dump({
@@ -125,4 +135,6 @@ shared_context "fresh" do
       ENV.delete key if key.start_with? "PLISTENER_"
     end
   }
+
+  let(:plnr) { Plistener.new WORKING_DIR, paths: PATHS }
 end
