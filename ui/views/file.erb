@@ -6,21 +6,4 @@
   </div>
 </div>
 
-<table class="table">
-  <tr>
-    <th>version</th>
-    <th>time</th>
-  </tr>
-  <% @history.reverse.each do |entry| %>
-    <tr>
-      <td>
-        <a href="/version<%= @system_path %>/<%= entry['file_hash'] %>">
-          <%= entry['file_hash'] %>
-        </a>
-      </td>
-      <td>
-        <%== erb :_time, locals: {time: entry['time'] } %>
-      </td>
-    </tr>
-  <% end %>
-</table>
+<%== erb :changes %>

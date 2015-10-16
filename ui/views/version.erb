@@ -4,21 +4,11 @@
       <%= @system_path %>
     </h4>
     <div>
-      version <%= @file_hash %>
-    </div>
-    <div>
-      seen:
-      <ul>
-        <% @seen.each do |time| %>
-          <li>
-            <%== erb :_time, locals: {time: time} %>
-          </li>
-        <% end %>
-      </ul>
+      version <%= @time %>
     </div>
     <div>
       view:
-      <a href="<%= request.path %>">table</a> | 
+      <a href="<%= request.path %>">table</a> |
       <a href="<%= request.path %>?view=yaml">yaml</a>
     </div>
   </div>

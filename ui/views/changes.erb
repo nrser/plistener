@@ -9,50 +9,50 @@
         </div>
 
         <div class="col col-md-4">
-          <a href="/version<%= change['path'] %>/<%= change['prev']['file_hash'] %>">
-            <%= change['prev']['file_hash'] %>
-          </a>
+          <%== partial :version, system_path: change['path'], time: change['prev']['time'] %>
         </div>
 
         <div class="col col-md-4">
-          <a href="/version<%= change['path'] %>/<%= change['current']['file_hash'] %>">
-            <%= change['current']['file_hash'] %>
-          </a>
+          <%== partial :version, system_path: change['path'], time: change['current']['time'] %>
         </div>
       </div><!-- .row -->
 
       <div class="row">
         <div class="col col-md-4">
-          <%== erb :_time, locals: {time: change['current']['time']} %>
+          <%== partial :time, time: change['time'] %>
         </div>
       </div><!-- .row -->
     </li>
 
-    <% change['diff'].each do |diff| %>
-      <li class="list-group-item">
-        <div class="row">
-          <div class="col col-md-4">
-            <samp><%= diff['key'] %></samp>
-          </div>
+    <% if change['diff'].empty? %>
+      <li class="list-group-item">(no changes)</li>
+    <% else %>
+      <% change['diff'].each do |diff| %>
+        <li class="list-group-item">
+          <div class="row">
+            <div class="col col-md-4">
+              <samp><%= diff['key'] %></samp>
+            </div>
 
-          <% if diff['op'] == 'remove' %>
-            <div class="col col-md-4">
-              <pre class="bg-danger"><%= erb :_value, locals: {value: diff['removed'] } %></pre>
-            </div>
-          <% elsif diff['op'] == 'add' %>
-            <div class="col col-md-4 col-md-offset-4">
-              <pre class="bg-success"><%= diff['added'].pretty_inspect %></pre>
-            </div>
-          <% elsif diff['op'] == 'change' %>
-            <div class="col col-md-4">
-              <pre class="bg-warning"><%= diff['from'].pretty_inspect %></pre>
-            </div>
-            <div class="col col-md-4">
-              <pre class="bg-warning"><%= diff['to'].pretty_inspect %></pre>
-            </div>
-          <% end %>
-        </div>
-      </li>
+            <% if diff['op'] == 'remove' %>
+              <div class="col col-md-4">
+                <pre class="bg-danger"><%== partial :value, value: diff['removed'] %></pre>
+              </div>
+            <% elsif diff['op'] == 'add' %>
+              <div class="col col-md-4 col-md-offset-4">
+                <pre class="bg-success"><%== partial :value, value: diff['added'] %></pre>
+              </div>
+            <% elsif diff['op'] == 'modify' %>
+              <div class="col col-md-4">
+                <pre class="bg-warning"><%== partial :value, value: diff['from'] %></pre>
+              </div>
+              <div class="col col-md-4">
+                <pre class="bg-warning"><%== partial :value, value: diff['to'] %></pre>
+              </div>
+            <% end %>
+          </div>
+        </li>
+      <% end %>
     <% end %>
 
   </ul>

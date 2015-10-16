@@ -26,6 +26,7 @@ command :clear do |c|
   c.description = "remove all the change files in `<working_dir>/changes`."
   c.syntax = "plistener clear [working_dir=.]"
   c.action do |args, options|
+    Plistener.configure_logger
     Plistener.new(working_dir(args, options)).clear
   end
 end
@@ -34,6 +35,7 @@ command :reset do |c|
   c.description = "remove all data in `<working_dir>/data` and change files in `<working_dir>/changes`."
   c.syntax = "plistener reset [working_dir=.]"
   c.action do |args, options|
+    Plistener.configure_logger
     Plistener.new(working_dir(args, options)).reset
   end
 end

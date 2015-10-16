@@ -4,15 +4,25 @@ require 'sinatra/base'
 
 class Plistener
   module UI
+    include Plistener::Logger::Include
+
     # Our simple hello-world app
     class App < Sinatra::Base
+      include Plistener::Logger::Include
+      configure_logger level: :debug
+
       def initialize working_dir
         @working_dir = Pathname.new working_dir
+        @plnr = Plistener.new @working_dir.to_s
         super
       end
 
       def erbetter tpl
         erb tpl, layout: :layout
+      end
+
+      def partial name, locals
+        erb "_#{ name }".to_sym, locals: locals
       end
 
       # threaded - False: Will take requests on the reactor thread
@@ -30,29 +40,27 @@ class Plistener
 
       # Request runs on the reactor thread (with threaded set to false)
       get '/' do
-        @changes = Dir[@working_dir + "changes/*.yml"].map do |filepath|
-          YAML.load File.read(filepath)
-        end
+        @changes = @plnr.changes
 
         erbetter :changes
       end
 
       get '/version/*' do
-        p, _, @file_hash = params['splat'].first.rpartition '/'
-        @system_path = "/" + p
-        @path = @working_dir + "data#{ @system_path }/#{ @file_hash }.yml"
-        @contents = File.read(@path)
-        @data = YAML.load @contents
+        @system_path, _, time_iso8601 = params['splat'].first.rpartition '@'
+        @time = Time.parse(time_iso8601)
+        @path = @plnr.version_path @time, @system_path
+
+        @data = Plistener.read @path
         @leaves = Plistener::UI.leaves @data
-        @seen = Plistener::UI.seen @working_dir, @system_path, @file_hash
 
         erbetter :version
       end
 
       get '/file/*' do
         @system_path = "/" + params['splat'].first
-        @history_path = @working_dir + "data#{ @system_path }/history.yml"
-        @history = YAML.load @history_path.read
+        @changes = @plnr.changes.select {|change|
+          change['path'] == @system_path
+        }
 
         erbetter :file
       end
@@ -112,37 +120,9 @@ class Plistener
           'uid'
         else
           "unknown"
-        end 
+        end
       end # type_name
-
-      def seen working_dir, system_path, file_hash
-        contents = File.read File.join(working_dir.to_s, "data", system_path, "history.yml")
-        data = YAML.load contents
-        data.select { |entry|
-          entry['file_hash'] == file_hash
-        }.map {|entry|
-          entry['time']
-        }
-      end
 
     end # class << self
   end # UI
 end # Plistener
-
-# get '/' do
-#   "hey"
-# end
-
-# class Plistener
-#   module UI
-#     class << self
-#       def run working_dir
-#         require 'sinatra'
-
-#         get "/" do
-#           "hey"
-#         end
-#       end
-#     end
-#   end
-# end

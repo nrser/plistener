@@ -454,6 +454,7 @@ class Plistener
     #     {
     #       'path' => String,
     #       'type' => 'modify' | 'add' | 'remove',
+    #       'time' => Time,
     #       'prev' => nil | {
     #         'path' => String,
     #         'time' => Time
@@ -500,13 +501,15 @@ class Plistener
                       current_version_path,
                       prev_version_path,
                       diff
-      change_path = change_path Time.now, system_path
+      now = Time.now
+      change_path = change_path now, system_path
 
       raise ChangePathConflictError.new if File.exists? change_path
 
       change = {
         'path' => system_path,
         'type' => type,
+        'time' => now,
         'prev' => nil,
         'current' => nil,
         'diff' => diff,
