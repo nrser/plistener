@@ -590,7 +590,14 @@ class Plistener
 
       listener.start
       @listening = true
-      debug "listening..."
+      info "listening..."
+      
+      info "starting UI..."
+      ui_thread = Thread.new do
+        require 'plistener/ui'
+        Plistener::UI.run @working_dir, log_to_file: true
+      end
+      ui_thread.abort_on_exception = true
 
       # Trap ^C
       Signal.trap("INT") {
@@ -601,13 +608,26 @@ class Plistener
       Signal.trap("TERM") {
         @listening = false
       }
-
-      sleep 0.01 while @listening
+      
+      begin
+        sleep 0.01 while @listening
+      rescue
+        info "exception while asleep"
+      end
 
       info "stoping listening..."
       listener.stop
       info "done listening."
+      
+      if ui_thread.alive?
+        info "stopping ui thread..."
+        ui_thread.kill
+        info "ui thread stopped."
+      else
+        info "ui thread already dead!"
+      end
 
+      info "exiting."
       nil
     end # #listen
 
