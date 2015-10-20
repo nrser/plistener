@@ -1,6 +1,9 @@
 require 'pathname'
 require 'pp'
 require 'sinatra/base'
+require 'nrser/extras'
+require 'webrick'
+require 'tilt/erubis'
 
 class Plistener
   module UI
@@ -29,7 +32,7 @@ class Plistener
       #            True:  Will queue request for background thread
       configure do
         set :threaded, false
-        set :root, (Pathname.new(__FILE__).dirname + ".." + ".." + "ui")
+        set :root, NRSER.git_root(__FILE__) + 'ui'
         set :erb, :escape_html => true
       end
 
@@ -68,20 +71,38 @@ class Plistener
 
     class << self
 
-      def run working_dir
+      def run working_dir, options = {}
+        options = {
+          log_to_file: false,
+        }.merge options
+        
         dispatch = Rack::Builder.app do
           map '/' do
             run App.new(working_dir)
           end
         end
-
-        Rack::Server.start({
+        
+        server_options = {
           app:    dispatch,
-          # server: 'thin',
+          server: 'webrick',
           Host:   '0.0.0.0',
           Port:   '7584', # plui
           signals: false,
-        })
+        }
+        
+        if options[:log_to_file]        
+          log_path = Pathname.new(working_dir) + 'log' + 'ui.log'
+          FileUtils.mkdir_p log_path.dirname
+          log_file = File.open log_path, 'w'
+          log_file.sync = true
+          
+          server_options[:Logger] = WEBrick::Log.new(log_file)
+          server_options[:AccessLog] = [
+            [log_file, WEBrick::AccessLog::COMBINED_LOG_FORMAT]
+          ]
+        end
+
+        Rack::Server.start(server_options)
       end # run
 
       def leaves hash, array = [], prefix = []
