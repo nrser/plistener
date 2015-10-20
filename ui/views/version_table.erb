@@ -1,5 +1,5 @@
 <table class="table table-striped">
-  <% @leaves.each do |key, value| %>
+  <% @leaves.sort.each do |key, value| %>
     <tr>
       <td><%= Plistener::UI.type_name value %></td>
       <td class="key">
