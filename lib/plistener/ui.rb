@@ -8,6 +8,7 @@ require 'tilt/erubis'
 class Plistener
   module UI
     include Plistener::Logger::Include
+    configure_logger level: :debug
 
     # Our simple hello-world app
     class App < Sinatra::Base
@@ -72,6 +73,8 @@ class Plistener
     class << self
 
       def run working_dir, options = {}
+        port = '7584'
+        
         options = {
           log_to_file: false,
         }.merge options
@@ -86,7 +89,7 @@ class Plistener
           app:    dispatch,
           server: 'webrick',
           Host:   '0.0.0.0',
-          Port:   '7584', # plui
+          Port:   port, # plui
           signals: false,
         }
         
@@ -101,7 +104,8 @@ class Plistener
             [log_file, WEBrick::AccessLog::COMBINED_LOG_FORMAT]
           ]
         end
-
+        
+        info 'starting server', port: port
         Rack::Server.start(server_options)
       end # run
 

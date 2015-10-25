@@ -4,8 +4,13 @@
 
     <li class="list-group-item header">
       <div class="row">
-        <div class="col col-md-4">
+        <div class="col col-md-12">
             <a href="/file<%= change['path'] %>"><%= change['path'] %></a>
+        </div>
+      </div><!-- .row -->
+      <div class="row">
+        <div class="col col-md-4">
+          <%== partial :time, time: change['time'] %>
         </div>
 
         <div class="col col-md-4">
@@ -14,12 +19,6 @@
 
         <div class="col col-md-4">
           <%== partial :version, system_path: change['path'], time: change['current']['time'] %>
-        </div>
-      </div><!-- .row -->
-
-      <div class="row">
-        <div class="col col-md-4">
-          <%== partial :time, time: change['time'] %>
         </div>
       </div><!-- .row -->
     </li>
