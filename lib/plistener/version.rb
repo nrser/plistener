@@ -1,5 +1,5 @@
 class Plistener
-  VERSION = "0.0.1"
+  VERSION = "0.0.1.dev"
 
   def self.readme section
     path = File.expand_path File.join('..', '..', '..', 'README.md'), __FILE__
